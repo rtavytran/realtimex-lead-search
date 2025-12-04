@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from urllib.parse import urlparse
 from typing import Iterable, List, Set, Tuple
 
 from .models import CacheStats, LeadCandidate
@@ -32,7 +34,15 @@ def _lead_keys(lead: LeadCandidate) -> List[str]:
     if lead.email:
         keys.append(f"email:{lead.email.lower()}")
     if lead.phone:
-        keys.append(f"phone:{lead.phone}")
+        normalized_phone = re.sub(r"\D", "", lead.phone)
+        keys.append(f"phone:{normalized_phone}")
     if lead.website:
-        keys.append(f"web:{lead.website.lower()}")
+        normalized_site = lead.website.lower().rstrip("/")
+        keys.append(f"web:{normalized_site}")
+    if lead.source_url:
+        parsed = urlparse(lead.source_url)
+        path = parsed.path.rstrip("/")
+        # Deduplicate on host + path to catch repeated Maps place links
+        src_norm = f"{parsed.netloc.lower()}{path}"
+        keys.append(f"src:{src_norm}")
     return keys

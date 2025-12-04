@@ -6,6 +6,14 @@ from typing import List
 
 from .models import SearchRequest, StrategyStep
 
+def _segment_key(source: str, query: str, location: str | None, page: int) -> str:
+    parts = [source]
+    if location:
+        parts.append(location)
+    parts.append(query)
+    parts.append(f"p{page}")
+    return "|".join(parts)
+
 
 def build_strategies(request: SearchRequest) -> List[StrategyStep]:
     """Dispatch to source-specific strategy builders."""
@@ -29,6 +37,7 @@ def build_google_maps_strategies(request: SearchRequest) -> List[StrategyStep]:
         for loc in locations:
             query = kw if not loc else f"{kw} {loc}"
             for page in range(1, max_pages + 1):
+                seg_key = _segment_key("google_maps", query, loc, page)
                 steps.append(
                     StrategyStep(
                         source="google_maps",
@@ -38,6 +47,7 @@ def build_google_maps_strategies(request: SearchRequest) -> List[StrategyStep]:
                         max_pages=max_pages,
                         throttle_seconds=1.5,
                         parser_hint="maps_listing",
+                        step_id=seg_key,
                     )
                 )
     return steps

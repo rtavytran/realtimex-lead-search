@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 from typing import Any, Dict
 
 DEFAULT_UA = (
@@ -21,9 +22,25 @@ def default_config(enable: bool = True) -> Dict[str, Any]:
         "stealth": True,
         "min_delay_ms": 400,
         "max_delay_ms": 1200,
+        "render_wait_ms": 1500,
+        "max_retries": 2,
         "proxy": None,
         "headless": True,
     }
+
+
+def context_options(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Build Playwright context kwargs (used at creation time)."""
+    if not config.get("enabled", False):
+        return {}
+    options: Dict[str, Any] = {}
+    if config.get("user_agent"):
+        options["user_agent"] = config["user_agent"]
+    if config.get("viewport"):
+        options["viewport"] = config["viewport"]
+    if config.get("extra_http_headers"):
+        options["extra_http_headers"] = config["extra_http_headers"]
+    return options
 
 
 def apply_to_context(context: Any, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -61,3 +78,19 @@ def apply_to_context(context: Any, config: Dict[str, Any]) -> Dict[str, Any]:
     applied["stealth"] = bool(config.get("stealth", True))
     applied["delays_ms"] = (config.get("min_delay_ms", 0), config.get("max_delay_ms", 0))
     return applied
+
+
+def delay_seconds(config: Dict[str, Any]) -> float:
+    """Return randomized delay window in seconds."""
+    if not config.get("enabled", False):
+        return 0.0
+    lo = max(0, int(config.get("min_delay_ms", 0)))
+    hi = max(lo, int(config.get("max_delay_ms", 0)))
+    if hi <= 0:
+        return 0.0
+    return random.uniform(lo, hi) / 1000.0
+
+
+def render_wait_ms(config: Dict[str, Any]) -> int:
+    """Return render wait time in ms after navigation."""
+    return int(config.get("render_wait_ms", 0) or 0)

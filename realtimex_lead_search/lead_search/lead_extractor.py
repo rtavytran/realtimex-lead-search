@@ -30,10 +30,24 @@ def extract_leads(
                 errors.append(art.error)
             continue
 
-        html = art.html or ""
-        text = _html_to_text(html)
-        parsed = _heuristic_extract(text, art.source)
-        leads.extend(parsed)
+        json_leads: List[LeadCandidate] = []
+        if art.json_blob is not None:
+            json_leads = _extract_from_json_blob(art.json_blob, art.source)
+            leads.extend(json_leads)
+
+        # Only fall back to HTML heuristics if we did not get structured listings.
+        if not json_leads:
+            html = art.html or ""
+            text = _html_to_text(html)
+            parsed = _heuristic_extract(text, art.source)
+            leads.extend(parsed)
+
+        # Propagate segment metadata when available
+        for lead in leads:
+            if lead.segment_key is None:
+                lead.segment_key = getattr(art, "segment_key", None)
+            if lead.segment_level is None:
+                lead.segment_level = getattr(art, "segment_level", None)
 
         if use_llm and llm_settings:
             llm_leads, llm_err = _llm_extract(text, llm_settings, llm_transport)
@@ -61,7 +75,7 @@ def _heuristic_extract(text: str, source: Optional[str]) -> List[LeadCandidate]:
         company = line.split(" - ")[0][:120] if " - " in line else line[:120]
         leads.append(
             LeadCandidate(
-                company_name=company,
+                company_name=_clean_text(company),
                 email=emails[0] if emails else None,
                 phone=phones[0] if phones else None,
                 source=source,
@@ -80,7 +94,7 @@ def _heuristic_extract(text: str, source: Optional[str]) -> List[LeadCandidate]:
             company_guess = " ".join(parts[-6:-1]) if len(parts) >= 6 else window[:120]
             leads.append(
                 LeadCandidate(
-                    company_name=company_guess.strip() or "Unknown",
+                    company_name=_clean_text(company_guess) or "Unknown",
                     phone=ph,
                     source=source,
                     confidence=0.3,
@@ -139,3 +153,69 @@ def _html_to_text(html: str) -> str:
     text = unescape(text)
     text = re.sub(r"\s+", " ", text)
     return text
+
+
+def _extract_from_json_blob(blob: Any, source: Optional[str]) -> List[LeadCandidate]:
+    """Parse structured listings emitted by the scraper."""
+    items: List[Any]
+    if isinstance(blob, list):
+        items = blob
+    elif isinstance(blob, dict):
+        items = blob.get("listings") or blob.get("results") or []
+    else:
+        return []
+
+    leads: List[LeadCandidate] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        company = _clean_text(
+            item.get("name")
+            or item.get("title")
+            or item.get("company_name")
+            or item.get("raw_text")
+            or ""
+        )
+        if not company:
+            continue
+        if company.lower() == "sponsored":
+            continue
+        phone_raw = item.get("phone") or ""
+        phone_match = re.search(r"\+?\d[\d\s().-]{7,}", phone_raw)
+        phone = phone_match.group(0).strip() if phone_match else None
+        if phone:
+            digits = re.sub(r"\D", "", phone)
+            if len(digits) < 7:
+                phone = None
+
+        address = _clean_text(item.get("address") or "")
+        map_url = item.get("map_url") or item.get("url") or item.get("source_url")
+        website_field = item.get("website") or item.get("homepage")
+        website = website_field if website_field else None
+        leads.append(
+            LeadCandidate(
+                company_name=company,
+                website=website,
+                phone=phone,
+                email=item.get("email"),
+                address=address or None,
+                category=item.get("category"),
+                contact_name=item.get("contact_name"),
+                contact_title=item.get("contact_title"),
+                confidence=float(item.get("confidence", 0.55)),
+                source_url=map_url,
+                source=source,
+            )
+        )
+    return leads
+
+
+def _clean_text(value: str) -> str:
+    """Normalize text by trimming whitespace and removing control glyphs."""
+    text = value or ""
+    text = text.replace("·", " ").strip()
+    text = re.sub(r"\s+", " ", text)
+    # Drop control chars and private-use glyphs (keeps Unicode like Vietnamese accents)
+    text = re.sub(r"[\u0000-\u001f\u007f]", "", text)
+    text = re.sub(r"[\ue000-\uf8ff]", "", text)
+    return text.strip(" -\t\r\n")

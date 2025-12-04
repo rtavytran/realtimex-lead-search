@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
+from uuid import uuid4
 from typing import Any, Dict, List, Optional
 
 
 def _ts() -> str:
     """ISO timestamp helper."""
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _uuid() -> str:
+    """UUIDv4 string (hyphenated)."""
+    return str(uuid4())
 
 
 @dataclass
@@ -109,7 +115,7 @@ class StrategyStep:
     max_pages: int = 1
     throttle_seconds: float = 1.0
     parser_hint: Optional[str] = None
-    step_id: str = field(default_factory=lambda: f"step-{_ts()}")
+    step_id: str = field(default_factory=_uuid)
 
 
 @dataclass
@@ -121,6 +127,8 @@ class ScrapeArtifact:
     json_blob: Optional[Any] = None
     screenshot_path: Optional[str] = None
     error: Optional[str] = None
+    segment_key: Optional[str] = None
+    segment_level: Optional[str] = None
     fetched_at: str = field(default_factory=_ts)
 
 
@@ -138,6 +146,13 @@ class LeadCandidate:
     source_url: Optional[str] = None
     source: Optional[str] = None
     captured_at: str = field(default_factory=_ts)
+    segment_key: Optional[str] = None
+    segment_level: Optional[str] = None
+    unique_key: Optional[str] = None
+    times_seen: int = 1
+    first_seen_run_id: Optional[str] = None
+    last_seen_run_id: Optional[str] = None
+    lead_id: str = field(default_factory=_uuid)
 
 
 @dataclass
@@ -163,11 +178,15 @@ class PersistenceResult:
 
 @dataclass
 class RunMetadata:
+    run_id: str = field(default_factory=_uuid)
     start_time: str = field(default_factory=_ts)
     end_time: Optional[str] = None
     sources_attempted: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     stats: Dict[str, Any] = field(default_factory=dict)
+    search_input_json: Optional[str] = None
+    search_fingerprint: Optional[str] = None
+    segments_json: Optional[str] = None
 
 
 @dataclass

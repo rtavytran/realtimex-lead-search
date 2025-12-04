@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling>=1.18.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "realtimex-lead-search"
+version = "0.1.0"
+description = "Lead search helper for RealtimeX flows."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "RealtimeX", email = "dev@realtimex.com" }]
+dependencies = []
+
+[project.optional-dependencies]
+playwright = ["playwright>=1.56.0"]
+dev = ["pytest>=7.4.0", "pytest-cov>=4.1.0", "build", "twine"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["realtimex_lead_search"]
